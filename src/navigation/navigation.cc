@@ -34,9 +34,9 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 
-using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::VisualizationMsg;
+using Eigen::Vector2f;
 using std::string;
 using std::vector;
 
@@ -48,103 +48,113 @@ DEFINE_double(cp1_curvature, 0.5, "Curvature for arc path (cp1)");
 
 DEFINE_double(cp2_curvature, 0.5, "Curvature for arc path (cp2)");
 
-namespace {
-ros::Publisher drive_pub_;
-ros::Publisher viz_pub_;
-VisualizationMsg local_viz_msg_;
-VisualizationMsg global_viz_msg_;
-AckermannCurvatureDriveMsg drive_msg_;
-// Epsilon value for handling limited numerical precision.
-const float kEpsilon = 1e-5;
-} //namespace
+namespace
+{
+  ros::Publisher drive_pub_;
+  ros::Publisher viz_pub_;
+  VisualizationMsg local_viz_msg_;
+  VisualizationMsg global_viz_msg_;
+  AckermannCurvatureDriveMsg drive_msg_;
+  // Epsilon value for handling limited numerical precision.
+  const float kEpsilon = 1e-5;
+} // namespace
 
-namespace navigation {
+namespace navigation
+{
 
-string GetMapFileFromName(const string& map) {
-  string maps_dir_ = ros::package::getPath("amrl_maps");
-  return maps_dir_ + "/" + map + "/" + map + ".vectormap.txt";
-}
+  string GetMapFileFromName(const string &map)
+  {
+    string maps_dir_ = ros::package::getPath("amrl_maps");
+    return maps_dir_ + "/" + map + "/" + map + ".vectormap.txt";
+  }
 
-Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
-    odom_initialized_(false),
-    localization_initialized_(false),
-    robot_loc_(0, 0),
-    robot_angle_(0),
-    robot_vel_(0, 0),
-    robot_omega_(0),
-    nav_complete_(true),
-    nav_goal_loc_(0, 0),
-    nav_goal_angle_(0) {
-  map_.Load(GetMapFileFromName(map_name));
-  drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
-      "ackermann_curvature_drive", 1);
-  viz_pub_ = n->advertise<VisualizationMsg>("visualization", 1);
-  local_viz_msg_ = visualization::NewVisualizationMessage(
-      "base_link", "navigation_local");
-  global_viz_msg_ = visualization::NewVisualizationMessage(
-      "map", "navigation_global");
-  InitRosHeader("base_link", &drive_msg_.header);
-}
+  Navigation::Navigation(const string &map_name, ros::NodeHandle *n) : odom_initialized_(false),
+                                                                       localization_initialized_(false),
+                                                                       robot_loc_(0, 0),
+                                                                       robot_angle_(0),
+                                                                       robot_vel_(0, 0),
+                                                                       robot_omega_(0),
+                                                                       nav_complete_(true),
+                                                                       nav_goal_loc_(0, 0),
+                                                                       nav_goal_angle_(0)
+  {
+    map_.Load(GetMapFileFromName(map_name));
+    drive_pub_ = n->advertise<AckermannCurvatureDriveMsg>(
+        "ackermann_curvature_drive", 1);
+    viz_pub_ = n->advertise<VisualizationMsg>("visualization", 1);
+    local_viz_msg_ = visualization::NewVisualizationMessage(
+        "base_link", "navigation_local");
+    global_viz_msg_ = visualization::NewVisualizationMessage(
+        "map", "navigation_global");
+    InitRosHeader("base_link", &drive_msg_.header);
+  }
 
-void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
-}
+  void Navigation::SetNavGoal(const Vector2f &loc, float angle)
+  {
+  }
 
-void Navigation::UpdateLocation(const Eigen::Vector2f& loc, float angle) {
-  localization_initialized_ = true;
-  robot_loc_ = loc;
-  robot_angle_ = angle;
-}
+  void Navigation::UpdateLocation(const Eigen::Vector2f &loc, float angle)
+  {
+    localization_initialized_ = true;
+    robot_loc_ = loc;
+    robot_angle_ = angle;
+  }
 
-void Navigation::UpdateOdometry(const Vector2f& loc,
-                                float angle,
-                                const Vector2f& vel,
-                                float ang_vel) {
-  robot_omega_ = ang_vel;
-  robot_vel_ = vel;
-  if (!odom_initialized_) {
-    odom_start_angle_ = angle;
-    odom_start_loc_ = loc;
-    odom_initialized_ = true;
+  void Navigation::UpdateOdometry(const Vector2f &loc,
+                                  float angle,
+                                  const Vector2f &vel,
+                                  float ang_vel)
+  {
+    robot_omega_ = ang_vel;
+    robot_vel_ = vel;
+    if (!odom_initialized_)
+    {
+      odom_start_angle_ = angle;
+      odom_start_loc_ = loc;
+      odom_initialized_ = true;
+      odom_loc_ = loc;
+      odom_angle_ = angle;
+      return;
+    }
     odom_loc_ = loc;
     odom_angle_ = angle;
-    return;
   }
-  odom_loc_ = loc;
-  odom_angle_ = angle;
-}
 
-void Navigation::ObservePointCloud(const vector<Vector2f>& cloud,
-                                   double time) {
-  point_cloud_ = cloud;                                     
-}
+  void Navigation::ObservePointCloud(const vector<Vector2f> &cloud,
+                                     double time)
+  {
+    point_cloud_ = cloud;
+  }
 
-void Navigation::Run() {
-  // This function gets called 20 times a second to form the control loop.
-  
-  // Clear previous visualizations.
-  visualization::ClearVisualizationMsg(local_viz_msg_);
-  visualization::ClearVisualizationMsg(global_viz_msg_);
+  void Navigation::Run()
+  {
+    // This function gets called 20 times a second to form the control loop.
 
-  // If odometry has not been initialized, we can't do anything.
-  if (!odom_initialized_) return;
+    // Clear previous visualizations.
+    visualization::ClearVisualizationMsg(local_viz_msg_);
+    visualization::ClearVisualizationMsg(global_viz_msg_);
 
-  // The control iteration goes here. 
-  // Feel free to make helper functions to structure the control appropriately.
-  
-  // The latest observed point cloud is accessible via "point_cloud_"
+    // If odometry has not been initialized, we can't do anything.
+    if (!odom_initialized_)
+      return;
 
-  // Eventually, you will have to set the control values to issue drive commands:
-  // drive_msg_.curvature = ...;
-  // drive_msg_.velocity = ...;
+    // The control iteration goes here.
+    // Feel free to make helper functions to structure the control appropriately.
 
-  // Add timestamps to all messages.
-  local_viz_msg_.header.stamp = ros::Time::now();
-  global_viz_msg_.header.stamp = ros::Time::now();
-  drive_msg_.header.stamp = ros::Time::now();
-  // Publish messages.
-  viz_pub_.publish(local_viz_msg_);
-  viz_pub_.publish(global_viz_msg_);
-  drive_pub_.publish(drive_msg_);
-}
+    // The latest observed point cloud is accessible via "point_cloud_"
 
-}  // namespace navigation
+    // Eventually, you will have to set the control values to issue drive commands:
+    drive_msg_.curvature = 0;
+    drive_msg_.velocity = 6;
+
+    // Add timestamps to all messages.
+    local_viz_msg_.header.stamp = ros::Time::now();
+    global_viz_msg_.header.stamp = ros::Time::now();
+    drive_msg_.header.stamp = ros::Time::now();
+    // Publish messages.
+    viz_pub_.publish(local_viz_msg_);
+    viz_pub_.publish(global_viz_msg_);
+    drive_pub_.publish(drive_msg_);
+  }
+
+} // namespace navigation
